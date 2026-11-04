@@ -1,0 +1,5 @@
+extracted/
+res/
+*.pak
+*.dat
+__pycache__/
