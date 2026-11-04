@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Dead Cells (web)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #ccc; font: 13px monospace; overflow: hidden; }
+  #canvas { display: block; width: 100vw; height: 100vh; }
+  #log { position: fixed; left: 0; bottom: 0; max-height: 40vh; overflow: auto; margin: 0; padding: 6px; white-space: pre-wrap; background: rgba(0,0,0,.6); pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<pre id="log"></pre>
+<script>
+  var logEl = document.getElementById('log');
+  function log(s) {
+    logEl.textContent += s + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+    console.log(s);
+  }
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    print: log,
+    printErr: log,
+    setStatus: function(s) { if (s) log(s); },
+  };
+</script>
+<script src="deadcells.js"></script>
+</body>
+</html>

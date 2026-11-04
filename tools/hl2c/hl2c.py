@@ -705,6 +705,18 @@ def tables(gen):
     return '\n'.join(out) + '\n'
 
 
+OVERRIDES = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'runtime', 'overrides')
+SKIP_OVERRIDES = set(filter(None, os.environ.get('HLAOT_SKIP_OVERRIDES', '').split(',')))
+
+
+def body_of(gen, f, needed):
+    body = gen.function(f, needed)
+    p = os.path.join(OVERRIDES, 'f%d.c' % f.findex)
+    if os.path.exists(p) and 'f%d' % f.findex not in SKIP_OVERRIDES:
+        return open(p, encoding='utf-8').read()
+    return body
+
+
 REAL_LIBS = set(os.environ.get('HLAOT_REAL_LIBS', 'std').split(','))
 LIB_PREFIX = {'std': 'hl_'}
 
@@ -723,7 +735,13 @@ def natives(gen):
             sym = LIB_PREFIX.get(lib, lib + '_') + name
             if sym not in seen:
                 seen.add(sym)
-                w('%s %s(%s);' % (ctype(t.ret), sym, args))
+                if lib in LIB_PREFIX:
+                    w('%s %s(%s);' % (ctype(t.ret), sym, args))
+                else:
+                    params = ','.join('%s p%d' % (ctype(x), k) for k, x in enumerate(t.args)) or 'void'
+                    ret = '' if t.ret.kind == HVOID else ' return 0;'
+                    w('__attribute__((weak)) %s %s(%s) { static int warned; if( !warned++ ) fprintf(stderr,"[missing] %s@%s\\n");%s }' % (
+                        ctype(t.ret), sym, params, lib, name, ret))
         else:
             sym = 'stub_%s_%s' % (lib, name)
             if sym not in seen:
@@ -772,7 +790,7 @@ def main(path, out_dir, per_file_ops=60000):
             continue
         kind = 'trap' if any(op == trap_op for op, _ in f.ops) else 'fun'
         g = groups[kind]
-        g[0].append((f.findex, gen.function(f, g[2])))
+        g[0].append((f.findex, body_of(gen, f, g[2])))
         g[1] += len(f.ops)
         if g[1] >= per_file_ops:
             flush(kind)
@@ -780,7 +798,7 @@ def main(path, out_dir, per_file_ops=60000):
     flush('trap')
     for f in big:
         needed = set()
-        body = gen.function(f, needed)
+        body = body_of(gen, f, needed)
         decls = [gen.fdecl(x) for x in sorted(needed | {f.findex})]
         name = 'big_%d.c' % f.findex
         with open(os.path.join(out_dir, name), 'w', encoding='utf-8', newline=chr(10)) as o:
