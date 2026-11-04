@@ -1,19 +1,22 @@
 # Dead Cells web port
 
-Experimental HashLink → WebAssembly port with a static GitHub Pages launcher.
+Experimental HashLink → WebAssembly port with a fully online static launcher.
 
-**[Open the web port](https://wheresrace.github.io/deadcellsport/)**
+**[Play online](https://deadcells-web-race.giovanniid6.chatgpt.site)**
 
 ## Play
 
-Open the Pages site in desktop Chrome or Edge and click **Play in browser**.
+Open the site in desktop Chrome or Edge and click **Play in browser**.
 The supported base game loads entirely online. No file selection or installation
 is required. Use a keyboard or gamepad. Double-click for fullscreen; append `?log`
 for diagnostics. This port does not provide touch controls.
 
-The page and runtime are served by GitHub Pages. The 2.07 GB archive is streamed
+The primary launcher is hosted on ChatGPT Sites and loads its runtime and bytecode
+from the versioned GitHub asset host. A GitHub Pages mirror is also configured at
+https://wheresrace.github.io/deadcellsport/ and depends on GitHub Actions for deployment.
+The 2.07 GB archive is streamed
 on demand from immutable 16 MiB files in this repository using GitHub's raw asset
-host, which supports CORS and byte ranges. The published Pages site itself is
+host, which supports CORS and byte ranges. The generated Pages bundle itself is
 about 73 MB, within its 1 GB site limit. Only requested ranges are downloaded,
 with a bounded in-memory cache. GitHub's bandwidth and rate limits still apply;
 for heavy traffic, move these chunks to object storage and change `--asset-base`.
@@ -39,6 +42,11 @@ rebuilding. The Pages workflow publishes only `docs/` and uses a partial checkou
 to avoid downloading the 2 GB asset folder during deployment. The local page
 and runtime URLs are relative, so repository subpaths work. The public site
 needs no application server and does not upload client logs.
+
+For other static hosts, the launcher also accepts `wasmUrl` and `bootUrl` in
+`runtime.json`. Point them to `docs/deadcells.wasm` and `docs/hlboot.bin` under the
+same immutable asset tag, and host only `index.html`, `launcher.js`, `deadcells.js`
+and `runtime.json`. This is the primary Site's configuration.
 
 For local testing: `python -m http.server 8643 --directory docs`, then visit
 `http://localhost:8643/`. The original developer server remains available via
