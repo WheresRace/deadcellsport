@@ -1,5 +1,6 @@
 extracted/
 res/
+!web-assets/res/
 *.pak
 *.dat
 __pycache__/

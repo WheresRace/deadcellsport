@@ -1,0 +1,3 @@
+web-assets/res/*.bin binary
+docs/*.bin binary
+docs/*.wasm binary
