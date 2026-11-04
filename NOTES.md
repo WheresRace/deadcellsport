@@ -1,8 +1,9 @@
 # Dead Cells → Web port
 
-Game Port. Game files come from the user's own Steam install and are never committed or published
-(`extracted/`, `*.pak`, `*.dat` are gitignored). `game-permissions.json` in the install folder is a verified
-Motion Twin document.
+Game Port. Source game files come from the user's own installs. Original `extracted/`, `*.pak`,
+and `*.dat` files remain gitignored. The requested fully online deployment publishes the supported
+GOG bytecode as `docs/hlboot.bin` and the archive in versioned `web-assets/res/*.bin` chunks.
+The install folder's `game-permissions.json` records authorization for local or public hosting.
 
 ## What the game is
 

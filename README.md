@@ -6,17 +6,18 @@ Experimental HashLink → WebAssembly port with a static GitHub Pages launcher.
 
 ## Play
 
-Open the Pages site in desktop Chrome or Edge, then select your **GOG 1.26.0**
-game folder. Alternatively select `res.pak` and `deadcells_gl.exe` individually;
-an extracted `hlboot_gl.dat` also works. The executable's bytecode must match
-the exact build used to compile the runtime. Other game versions and DLC are
-unsupported.
+Open the Pages site in desktop Chrome or Edge and click **Play in browser**.
+The supported base game loads entirely online. No file selection or installation
+is required. Use a keyboard or gamepad. Double-click for fullscreen; append `?log`
+for diagnostics. This port does not provide touch controls.
 
-Files are read locally in chunks and are never uploaded. The site contains the
-launcher and compiled runtime; the original game archive and bytecode are excluded.
+The page and runtime are served by GitHub Pages. The 2.07 GB archive is streamed
+on demand from immutable 16 MiB files in this repository using GitHub's raw asset
+host, which supports CORS and byte ranges. The published Pages site itself is
+about 73 MB, within its 1 GB site limit. Only requested ranges are downloaded,
+with a bounded in-memory cache. GitHub's bandwidth and rate limits still apply;
+for heavy traffic, move these chunks to object storage and change `--asset-base`.
 Saves stay in this browser's IndexedDB. Clearing site data removes those saves.
-Use a keyboard or gamepad. Double-click for fullscreen; append `?log` for diagnostics.
-This port does not provide touch controls.
 
 ## Build and deploy
 
@@ -24,14 +25,19 @@ The existing local toolchain and generated C files are required to rebuild:
 
 ```powershell
 python runtime/build.py web
+python tools/package_assets.py
 python tools/package_pages.py
 ```
 
-The packager writes an allowlisted static site to `docs/`, including a version
-fingerprint derived from local game files, without copying those files. Commit
-`docs/` after rebuilding. GitHub Pages serves the `docs/` folder on `master`.
-All asset URLs are relative, so repository subpaths work. There is no server
-dependency, range-request requirement, or client-log upload on the public site.
+Commit and push `web-assets/`, then tag that asset commit as `assets-v1` and push
+the tag. The default launcher configuration pins its archive URLs to that tag.
+For a changed archive, use a new tag and pass the corresponding URL prefix to
+`python tools/package_pages.py --asset-base <URL>`.
+
+The packager writes an allowlisted static site to `docs/`. Commit `docs/` after
+rebuilding. GitHub Pages serves the `docs/` folder on `master`. The local page
+and runtime URLs are relative, so repository subpaths work. The public site
+needs no application server and does not upload client logs.
 
 For local testing: `python -m http.server 8643 --directory docs`, then visit
 `http://localhost:8643/`. The original developer server remains available via
@@ -40,4 +46,4 @@ For local testing: `python -m http.server 8643 --directory docs`, then visit
 See `NOTES.md` for the translator, native libraries, build steps and known issues.
 
 Unofficial experimental project, not affiliated with Motion Twin or Evil Empire.
-Dead Cells belongs to its respective owners. Original game files are not included.
+Dead Cells belongs to its respective owners.

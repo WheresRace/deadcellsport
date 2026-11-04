@@ -1,4 +1,4 @@
-"""Assemble a static Pages site without copying local game files."""
+"""Assemble the online launcher; the archive is served separately in chunks."""
 import argparse
 import hashlib
 import json
@@ -12,17 +12,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=ROOT / 'docs')
     parser.add_argument('--game-dir', type=Path, default=ROOT / 'run' / 'gog')
+    parser.add_argument('--asset-base', default='https://raw.githubusercontent.com/WheresRace/deadcellsport/assets-v1/web-assets/res/')
     args = parser.parse_args()
     sources = {
         'index.html': ROOT / 'runtime/web/pages.html',
-        'launcher.js': ROOT / 'runtime/web/launcher.js',
+        'launcher.js': ROOT / 'runtime/web/online.js',
         'deadcells.js': ROOT / 'build/web/deadcells.js',
         'deadcells.wasm': ROOT / 'build/web/deadcells.wasm',
+        'hlboot.bin': args.game_dir / 'hlboot_gl.dat',
     }
     for source in sources.values():
         if not source.is_file():
             parser.error(f'Missing {source}; build the web runtime first.')
-    if 'Module.hlaotFiles' not in sources['deadcells.js'].read_text(encoding='utf-8'):
+    if 'Module.hlaotPakManifest' not in sources['deadcells.js'].read_text(encoding='utf-8'):
         parser.error('Web runtime is stale; run python runtime/build.py web first.')
     boot = args.game_dir / 'hlboot_gl.dat'
     pak = args.game_dir / 'res.pak'
@@ -30,6 +32,8 @@ def main():
         'gameVersion': 'GOG 1.26.0',
         'bootSha256': hashlib.sha256(boot.read_bytes()).hexdigest(),
         'pakSize': pak.stat().st_size,
+        'bootUrl': 'hlboot.bin',
+        'pak': {'size': pak.stat().st_size, 'chunkSize': 16 * 1024 * 1024, 'chunkBase': args.asset_base},
     }
     args.out.mkdir(parents=True, exist_ok=True)
     allowed = set(sources) | {'.nojekyll', 'runtime.json'}
@@ -41,7 +45,7 @@ def main():
     (args.out / 'runtime.json').write_text(json.dumps(config, indent=2) + '\n', encoding='utf-8')
     (args.out / '.nojekyll').touch()
     print(f'Pages site: {args.out} ({sum(p.stat().st_size for p in args.out.iterdir()):,} bytes)')
-    print('Only the launcher and compiled runtime are included. No game archive or bytecode is copied.')
+    print('The game archive is streamed from versioned online chunk files.')
 
 
 if __name__ == '__main__':

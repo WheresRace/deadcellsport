@@ -38,11 +38,11 @@ var HLAOT_MAX_CHUNKS = 256;
 
 function hlaotRangeFile(url, size) {
   var cache = new Map;
-  function fetchRange(from, to) {
+  function fetchBytes(source, from, to, sourceSize) {
     var xhr = new XMLHttpRequest;
     // Blob slices keep multi-gigabyte local archives out of the wasm heap.
-    var local = typeof url !== "string";
-    var requestUrl = local ? URL.createObjectURL(url.slice(from, to)) : url;
+    var local = typeof source !== "string";
+    var requestUrl = local ? URL.createObjectURL(source.slice(from, to)) : source;
     xhr.open("GET", requestUrl, false);
     if (!local) xhr.setRequestHeader("Range", "bytes=" + from + "-" + (to - 1));
     xhr.overrideMimeType("text/plain; charset=x-user-defined");
@@ -53,10 +53,26 @@ function hlaotRangeFile(url, size) {
     }
     if (xhr.status !== 206 && xhr.status !== 200) throw new Error("range read failed " + url + " " + xhr.status);
     var s = xhr.responseText;
-    if (!local && xhr.status === 200 && s.length === size) s = s.slice(from, to);
+    if (!local && xhr.status === 200 && s.length === sourceSize) s = s.slice(from, to);
     if (s.length !== to - from) throw new Error("Incomplete archive read");
     var out = new Uint8Array(s.length);
     for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 255;
+    return out;
+  }
+  function fetchRange(from, to) {
+    if (!url.chunkBase) return fetchBytes(url, from, to, size);
+    var out = new Uint8Array(to - from);
+    var position = from;
+    while (position < to) {
+      var index = Math.floor(position / url.chunkSize);
+      var base = index * url.chunkSize;
+      var sourceSize = Math.min(url.chunkSize, size - base);
+      var end = Math.min(to, base + sourceSize);
+      var source = url.chunkBase + String(index).padStart(4, "0") + ".bin";
+      var data = fetchBytes(source, position - base, end - base, sourceSize);
+      out.set(data, position - from);
+      position = end;
+    }
     return out;
   }
   function load(first, last) {
@@ -157,7 +173,7 @@ Module.preRun.push(function() {
     return;
   }
   addRunDependency("hlaot-boot");
-  fetch(base + boot).then(function(r) {
+  fetch(Module.hlaotBootUrl || base + boot).then(function(r) {
     if (!r.ok) throw new Error(boot + " " + r.status);
     return r.arrayBuffer();
   }).then(function(b) {
@@ -166,6 +182,13 @@ Module.preRun.push(function() {
   }).catch(function(error) {
     abort(error.message);
   });
+  if (Module.hlaotPakManifest) {
+    Object.keys(Module.hlaotPakManifest).forEach(function(name) {
+      var pak = Module.hlaotPakManifest[name];
+      hlaotMountRange(dir, name, pak, pak.size);
+    });
+    return;
+  }
   (Module.hlaotPaks || [ "res.pak" ]).forEach(function(pak) {
     var id = "hlaot-" + pak;
     addRunDependency(id);
