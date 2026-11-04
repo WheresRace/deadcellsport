@@ -35,7 +35,8 @@ For a changed archive, use a new tag and pass the corresponding URL prefix to
 `python tools/package_pages.py --asset-base <URL>`.
 
 The packager writes an allowlisted static site to `docs/`. Commit `docs/` after
-rebuilding. GitHub Pages serves the `docs/` folder on `master`. The local page
+rebuilding. The Pages workflow publishes only `docs/` and uses a partial checkout
+to avoid downloading the 2 GB asset folder during deployment. The local page
 and runtime URLs are relative, so repository subpaths work. The public site
 needs no application server and does not upload client logs.
 
