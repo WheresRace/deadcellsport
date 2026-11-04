@@ -3,3 +3,6 @@ res/
 *.pak
 *.dat
 __pycache__/
+tools/dl/
+tools/hashlink*/
+run/
