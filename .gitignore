@@ -6,3 +6,6 @@ __pycache__/
 tools/dl/
 tools/hashlink*/
 run/
+toolchain/
+third_party/
+build/
