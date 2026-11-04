@@ -13,8 +13,8 @@ F11 toggles fullscreen; rapid mouse clicks do not change fullscreen. Append `?lo
 for diagnostics. This port does not provide touch controls.
 
 The primary launcher is hosted on GitHub Pages. Its deployment uses GitHub Actions.
-An existing ChatGPT Sites deployment is kept compatible and loads the same runtime
-and bytecode from the versioned GitHub asset host.
+The previous ChatGPT Sites address redirects to this URL, avoiding the personal
+account name in that host's address.
 The 2.07 GB archive is streamed
 on demand from immutable 16 MiB files in this repository using GitHub's raw asset
 host, which supports CORS and byte ranges. The generated Pages bundle itself is
