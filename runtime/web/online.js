@@ -34,19 +34,20 @@ var Module;
       var response = await fetch('runtime.json');
       if (!response.ok) throw new Error('The game could not be reached. Reload to try again.');
       var config = await response.json();
-      var wasmModule;
+      var wasmBinary;
       if (config.wasmUrl) {
         status.textContent = 'Downloading game runtime…';
         var wasmResponse = await fetch(config.wasmUrl);
         if (!wasmResponse.ok) throw new Error('Runtime download failed. Reload to try again.');
-        wasmModule = await WebAssembly.compile(await wasmResponse.arrayBuffer());
+        wasmBinary = await wasmResponse.arrayBuffer();
       }
       Module = {
         canvas: canvas,
-        instantiateWasm: wasmModule ? function(imports, success) {
-          var instance = new WebAssembly.Instance(wasmModule, imports);
-          success(instance);
-          return instance.exports;
+        instantiateWasm: wasmBinary ? function(imports, success) {
+          WebAssembly.instantiate(wasmBinary, imports).then(function(result) {
+            success(result.instance);
+          }).catch(fail);
+          return {};
         } : undefined,
         hlaotBootUrl: config.bootUrl,
         hlaotPakManifest: { 'res.pak': config.pak },
