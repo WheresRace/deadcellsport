@@ -2,6 +2,8 @@
 
 Experimental HashLink → WebAssembly port with a static GitHub Pages launcher.
 
+**[Open the web port](https://wheresrace.github.io/deadcellsport/)**
+
 ## Play
 
 Open the Pages site in desktop Chrome or Edge, then select your **GOG 1.26.0**
