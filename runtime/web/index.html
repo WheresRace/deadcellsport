@@ -5,8 +5,8 @@
 <title>Dead Cells (web)</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; color: #ccc; font: 13px monospace; overflow: hidden; }
-  #canvas { display: block; width: 100vw; height: 100vh; }
-  #log { position: fixed; left: 0; bottom: 0; max-height: 40vh; overflow: auto; margin: 0; padding: 6px; white-space: pre-wrap; background: rgba(0,0,0,.6); pointer-events: none; }
+  #canvas { display: block; position: absolute; inset: 0; margin: auto; width: min(100vw, calc(100vh * 16 / 9)) !important; height: min(100vh, calc(100vw * 9 / 16)) !important; }
+  #log { position: fixed; left: 0; bottom: 0; max-height: 40vh; overflow: auto; margin: 0; padding: 6px; white-space: pre-wrap; background: rgba(0,0,0,.6); pointer-events: none; display: none; }
 </style>
 </head>
 <body>
@@ -14,10 +14,78 @@
 <pre id="log"></pre>
 <script>
   var logEl = document.getElementById('log');
+  if (/[?&]log/.test(location.search)) logEl.style.display = 'block';
+  function toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+  }
+  document.getElementById('canvas').addEventListener('dblclick', toggleFullscreen);
+  // F11 would otherwise reach the game (SDL swallows it); use page fullscreen so Esc can be locked to the game.
+  addEventListener('keydown', function(e) {
+    if (e.key !== 'F11') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    toggleFullscreen();
+  }, true);
+  document.addEventListener('fullscreenchange', function() {
+    if (!navigator.keyboard || !navigator.keyboard.lock) return;
+    if (document.fullscreenElement) navigator.keyboard.lock(['Escape']);
+    else navigator.keyboard.unlock();
+  });
+  // Browsers start audio suspended until a user gesture; keep trying on every real input until it runs.
+  function resumeAudio(e) {
+    if (!e.isTrusted || typeof AL === 'undefined' || !AL.contexts) return;
+    for (var k in AL.contexts) {
+      var c = AL.contexts[k];
+      if (c && c.audioCtx && c.audioCtx.state !== 'running') c.audioCtx.resume();
+    }
+  }
+  ['keydown', 'mousedown', 'pointerdown', 'touchstart'].forEach(function(t) { addEventListener(t, resumeAudio, true); });
+  // Errors go to the local server's log (build/web_client.log) so they can be read without the page.
+  // Each tab tags its lines, so several open tabs can share the log.
+  var pending = [], heapTicks = 0, logUrl = '/log?' + (window.__logId = Math.random().toString(36).slice(2, 6));
+  setInterval(function() {
+    if (typeof HEAP8 !== 'undefined' && ++heapTicks % 10 === 0)
+      pending.push('[heap] ' + (HEAP8.length >>> 20) + ' MB reserved, ' + (Module._hlaot_gc_live_mb ? Module._hlaot_gc_live_mb() : '?') + ' MB GC');
+    if (!pending.length) return;
+    navigator.sendBeacon(logUrl, pending.join('\n'));
+    pending = [];
+  }, 1000);
   function log(s) {
-    logEl.textContent += s + '\n';
-    logEl.scrollTop = logEl.scrollHeight;
+    if (logEl.style.display !== 'none') {
+      logEl.textContent += s + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    if (!/^\[(stub|missing)\]|chroma|discord/.test(s)) pending.push(s);
+    // Traces are sent right away: the page may be stuck in a loop and never reach the timer.
+    if (/^\[(throw|sleep|null access|hang)\]|^\s+at /.test(s)) {
+      var x = new XMLHttpRequest();
+      x.open('POST', logUrl, false);
+      x.send(pending.join('\n'));
+      pending = [];
+    }
     console.log(s);
+  }
+  if (/[?&]profile/.test(location.search) && window.Profiler) {
+    window.__profiler = new Profiler({ sampleInterval: 10, maxBufferSize: 200000 });
+    window.__profile = async function(top) {
+      var p = window.__profiler;
+      window.__profiler = new Profiler({ sampleInterval: 10, maxBufferSize: 200000 });
+      var trace = await p.stop();
+      var self = new Map(), total = new Map();
+      trace.samples.forEach(function(s) {
+        var seen = new Set(), id = s.stackId, first = true;
+        while (id !== undefined) {
+          var st = trace.stacks[id], fr = trace.frames[st.frameId], name = fr.name || '(anon)';
+          if (first) self.set(name, (self.get(name) || 0) + 1);
+          if (!seen.has(name)) { seen.add(name); total.set(name, (total.get(name) || 0) + 1); }
+          first = false;
+          id = st.parentId;
+        }
+      });
+      var fmt = function(m) { return [...m.entries()].sort(function(a, b) { return b[1] - a[1]; }).slice(0, top || 25).map(function(e) { return e[1] + ' ' + e[0]; }); };
+      return { samples: trace.samples.length, self: fmt(self), total: fmt(total) };
+    };
   }
   var Module = {
     canvas: document.getElementById('canvas'),

@@ -71,6 +71,31 @@ Known hard parts:
   boot tests until pointer roots are handled (shadow-stack roots emitted by the translator is the fallback).
 - Steam build needs Steam to start; not bypassed. A DRM-free (GOG) bytecode goes through the same pipeline.
 
+## Web status (GOG build, 2026-11-03)
+
+- Source: GOG 1.26.0 installed to `run/gog`; bytecode carved to `extracted/hlboot_gog_gl.dat` (HLB v5, 36,967 functions,
+  `gog` natives instead of `steam`). Steam bytecode still works through the same pipeline but stops at `steam.Api.init`.
+- Regenerate: `HLAOT_SKIP_OVERRIDES=f6252 HLAOT_REAL_LIBS=std,fmt,sdl,openal,gog python tools/hl2c/hl2c.py extracted/hlboot_gog_gl.dat build/c`,
+  then `python runtime/build.py web`, `node runtime/web/serve.js` → http://127.0.0.1:8642/ (serves `run/gog`, override with `GAME_DIR`).
+- Overrides in `runtime/overrides/` match `f<findex>.c` or the function name without `$` (`hxd.System.runMainLoop.c`);
+  name-based files use `@F(name)`, `@N(lib.name)`, `@SC(k)`, `@T(r)` placeholders so they survive bytecode changes.
+- Browser: boots, WebGL2 + 1,291 shaders, splash → title screen → Play loads the Prisoners' Quarters intro.
+- Web natives: sockets never connect (`runtime/web/net.c`), EFX source params dropped (`platform.c`), Win32 dialogs
+  print to the log, `ErrorHandler.sendReport` is a no-op. GOG Galaxy is offline (`gog.c`: not signed in, language
+  "English", no DLC — only the base game is installed in `run/gog`). Missing gog natives returned NULL, and the crash
+  handler's `String.fromUTF8(NULL)` hid level-load errors and left `Game.level` null ("Null access" every frame).
+- Screen: the SDL lib reports the canvas' CSS size as the display, fullscreen/borderless modes just fit the window to
+  the page, and `hlaot_frame_begin` refits it when the page resizes. Browser fullscreen: double-click; Esc goes to
+  the game while fullscreen (Keyboard Lock).
+- GC: `HLAOT_GC=frame` (default on the web; `?nogc` turns it off) disables automatic collection and runs a major GC
+  at frame start once allocation passes max(25% of heap, 64 MB) — no Haxe locals are live there.
+- Saves: `/game/save` is IDBFS, loaded before start and flushed every 5 s and on `pagehide`. The `FATAL : Could not
+  read save file` line on a first run is normal (`Save.tryLoad` handles the missing file).
+- Debugging: `?profile` starts the JS Self-Profiling API (`await __profile(30)` in the console; server sends
+  `Document-Policy: js-profiling`); link with `EXTRA_LINK=--profiling-funcs` to get `fN` names in stacks, map them
+  with `extracted/disasm_gog/INDEX.tsv`. Null accesses log a C stack.
+- Open: ~10 s of shader links at boot (ANGLE D3D11), EFX reverb/filters silent, frames throttle in hidden tabs.
+
 ## Milestones
 
 1. ✅ Carve bytecode, parse it exactly, typed disassembly, pak index.

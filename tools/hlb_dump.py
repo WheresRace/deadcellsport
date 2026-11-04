@@ -85,4 +85,5 @@ def main(path, out_dir):
     print('files', len(groups), 'functions', len(index), 'named', sum(1 for l in index if not l.split('\t')[1].startswith('f')))
 
 
-main(sys.argv[1], sys.argv[2])
+if __name__ == '__main__':
+    main(sys.argv[1], sys.argv[2])

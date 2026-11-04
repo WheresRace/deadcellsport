@@ -1,7 +1,8 @@
-import os, sys, math, collections
+import os, sys, math, re, collections
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import hlb
 from hlb import *
+from hlb_dump import function_names
 
 OPS = {name: i for i, (name, _) in enumerate(hlb.OPCODES)}
 NON_PTR = {HVOID, HUI8, HUI16, HI32, HI64, HF32, HF64, HBOOL, HGUID}
@@ -73,6 +74,8 @@ class Gen:
         for lib, name, t, findex in code.natives:
             self.ftypes[findex] = t
             self.is_native.add(findex)
+        self.names = function_names(code)
+        self.by_name = {n: i for i, n in self.names.items()}
         self.offsets = []
         self.offset_ids = {}
         self.sigs = {}
@@ -162,11 +165,22 @@ class Gen:
         nargs = len(ft.args)
         out = []
         w = out.append
-        args = ','.join('%s r%d' % (ctype(regs[i]), i) for i in range(nargs)) or 'void'
+        # Pointer registers live in a frame struct whose address escapes, so they sit in linear memory at every
+        # call and the GC's conservative stack scan sees them (plain wasm locals are invisible to it).
+        ptrs = [i for i in range(len(regs)) if regs[i].kind != HVOID and is_ptr(regs[i])]
+        args = ','.join('%s %s%d' % (ctype(regs[i]), 'a' if i in ptrs else 'r', i) for i in range(nargs)) or 'void'
         w('%s f%d(%s) {' % (ctype(ft.ret), f.findex, args))
+        if ptrs:
+            w('\tstruct { %s } fr = {0};' % ' '.join('%s r%d;' % (ctype(regs[i]), i) for i in ptrs))
+            for i in ptrs:
+                if i < nargs:
+                    w('\tfr.r%d = a%d;' % (i, i))
+            w('\thlaot_roots(&fr);')
+            for i in ptrs:
+                w('#define r%d fr.r%d' % (i, i))
         decls = collections.defaultdict(list)
         for i in range(nargs, len(regs)):
-            if regs[i].kind != HVOID:
+            if regs[i].kind != HVOID and i not in ptrs:
                 decls[ctype(regs[i])].append('r%d = 0' % i)
         for ty, names in decls.items():
             for nm in names:
@@ -322,6 +336,8 @@ class Gen:
                 s = '%s = %s;' % (R(a[0]), 'true' if a[1] else 'false')
             elif name == 'String':
                 s = '%s = S(%d);' % (R(a[0]), a[1])
+            elif name == 'Bytes':
+                s = '%s = (vbyte*)B(%d);' % (R(a[0]), a[1])
             elif name == 'Null':
                 s = '%s = 0;' % R(a[0])
             elif name in ('Add', 'Sub', 'Mul', 'And', 'Or', 'Xor'):
@@ -452,7 +468,9 @@ class Gen:
                 s = 'if( !(%s >= %s) ) goto %s;' % (R(a[0]), R(a[1]), label(i, a[2]))
             elif name == 'JAlways':
                 s = 'goto %s;' % label(i, a[0])
-            elif name in ('Label', 'Nop', 'Assert', 'Prefetch'):
+            elif name == 'Label':
+                s = 'HLAOT_LOOP(%d);' % f.findex
+            elif name in ('Nop', 'Assert', 'Prefetch'):
                 s = None
             elif name == 'ToDyn':
                 r, v = a
@@ -588,6 +606,8 @@ class Gen:
         if ft.ret.kind != HVOID:
             w('\treturn 0;')
         w('}')
+        for i in ptrs:
+            w('#undef r%d' % i)
         return '\n'.join(out)
 
 
@@ -600,12 +620,20 @@ extern int *hlaot_offsets;
 extern vbyte **hlaot_strings;
 extern int *hlaot_hashes;
 extern void **hlaot_fptrs;
+extern char *hlaot_bytes(int i);
 #define T(i) (hlaot_types + (i))
 #define G(i) (hlaot_globals[i])
 #define O(i) (hlaot_offsets[i])
 #define S(i) ((void*)hlaot_strings[i])
 #define H(i) (hlaot_hashes[i])
 #define F(i) (hlaot_fptrs[i])
+#define B(i) (hlaot_bytes(i))
+void hlaot_null_access( void );
+#define hl_null_access() hlaot_null_access()
+void hlaot_roots( void *frame );
+extern unsigned hlaot_ticks;
+void hlaot_loop_check( int findex );
+#define HLAOT_LOOP(f) if( !(++hlaot_ticks & 0xFFFFF) ) hlaot_loop_check(f)
 '''
 
 
@@ -709,16 +737,60 @@ OVERRIDES = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..',
 SKIP_OVERRIDES = set(filter(None, os.environ.get('HLAOT_SKIP_OVERRIDES', '').split(',')))
 
 
-def body_of(gen, f, needed):
-    body = gen.function(f, needed)
+def override_source(gen, f):
     p = os.path.join(OVERRIDES, 'f%d.c' % f.findex)
     if os.path.exists(p) and 'f%d' % f.findex not in SKIP_OVERRIDES:
         return open(p, encoding='utf-8').read()
-    return body
+    name = gen.names.get(f.findex)
+    if name:
+        p = os.path.join(OVERRIDES, name.replace('$', '') + '.c')
+        if os.path.exists(p) and name.replace('$', '') not in SKIP_OVERRIDES:
+            return open(p, encoding='utf-8').read()
+    return None
+
+
+def expand_override(gen, f, src, needed):
+    closures = [a[1] for op, a in f.ops if op == OPS['StaticClosure']]
+
+    def fn(m):
+        findex = gen.by_name[m.group(1)]
+        needed.add(findex)
+        return 'f%d' % findex
+
+    def sc(m):
+        findex = closures[int(m.group(1))]
+        needed.add(findex)
+        return 'f%d' % findex
+    src = re.sub(r'@F\(([^)]+)\)', fn, src)
+    src = re.sub(r'@N\(([^)]+)\)', lambda m: 'F(%d)' % gen.by_name['@' + m.group(1)], src)
+    src = re.sub(r'@SC\((\d+)\)', sc, src)
+    src = re.sub(r'@T\((\d+)\)', lambda m: str(gen.tid[id(f.regs[int(m.group(1))])]), src)
+    return src
+
+
+def body_of(gen, f, needed):
+    body = gen.function(f, needed)
+    src = override_source(gen, f)
+    if src is None:
+        return body
+    return expand_override(gen, f, src, needed)
 
 
 REAL_LIBS = set(os.environ.get('HLAOT_REAL_LIBS', 'std').split(','))
 LIB_PREFIX = {'std': 'hl_'}
+NATIVE_BINDINGS = {
+    ('ssl', 'dgst_make'): 'hlaot_dgst_make',
+    ('std', 'gc_enable'): 'hlaot_gc_enable',
+    ('std', 'gc_major'): 'hlaot_gc_major',
+    ('std', 'socket_set_timeout'): 'hlaot_socket_set_timeout',
+    ('std', 'socket_set_fast_send'): 'hlaot_socket_set_fast_send',
+    ('std', 'socket_connect'): 'hlaot_socket_connect',
+    ('ui', 'ui_winlog_set_text'): 'hlaot_ui_winlog_set_text',
+    ('ui', 'ui_dialog'): 'hlaot_ui_dialog',
+    ('openal', 'al_sourcei'): 'hlaot_al_sourcei',
+    ('openal', 'al_source3i'): 'hlaot_al_source3i',
+    ('openal', 'al_sourcef'): 'hlaot_al_sourcef',
+}
 
 
 def natives(gen):
@@ -731,11 +803,11 @@ def natives(gen):
     for i, (lib, name, t, findex) in enumerate(c.natives):
         lib = lib.lstrip('?')
         args = ','.join(ctype(x) for x in t.args) or 'void'
-        if lib in REAL_LIBS:
-            sym = LIB_PREFIX.get(lib, lib + '_') + name
+        if lib in REAL_LIBS or (lib, name) in NATIVE_BINDINGS:
+            sym = NATIVE_BINDINGS.get((lib, name), LIB_PREFIX.get(lib, lib + '_') + name)
             if sym not in seen:
                 seen.add(sym)
-                if lib in LIB_PREFIX:
+                if lib in LIB_PREFIX or (lib, name) in NATIVE_BINDINGS:
                     w('%s %s(%s);' % (ctype(t.ret), sym, args))
                 else:
                     params = ','.join('%s p%d' % (ctype(x), k) for k, x in enumerate(t.args)) or 'void'
@@ -748,6 +820,10 @@ def natives(gen):
                 seen.add(sym)
                 params = ','.join('%s p%d' % (ctype(x), k) for k, x in enumerate(t.args)) or 'void'
                 ret = '' if t.ret.kind == HVOID else ' return 0;'
+                # No native dialog exists on the web. Report it closed instead
+                # of spinning forever waiting for an unavailable desktop window.
+                if lib == 'ui' and name == 'ui_loop' and t.ret.kind == HI32:
+                    ret = ' return 2;'
                 w('static %s %s(%s) { static int warned; if( !warned++ ) fprintf(stderr,"[stub] %s@%s\\n");%s }' % (
                     ctype(t.ret), sym, params, lib, name, ret))
         entries.append(sym)

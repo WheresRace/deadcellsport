@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#11121a">
+<link rel="icon" href="data:,">
+<title>Dead Cells · Web Port</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: #11121a; color: #e9e7ef; font: 16px/1.6 system-ui, sans-serif; }
+  body { min-height: 100vh; display: grid; place-items: center; padding: 28px; background: radial-gradient(ellipse at top, #302039, #11121a 65%); }
+  main { width: min(100%, 620px); padding: 42px; border: 1px solid #44404d; border-radius: 20px; background: #191922; box-shadow: 0 24px 90px #0005; }
+  .eyebrow { color: #edb376; letter-spacing: .2em; font-size: 12px; font-weight: 700; }
+  h1 { font-size: clamp(36px, 8vw, 58px); letter-spacing: -.055em; line-height: 1; margin: 18px 0; }
+  p { color: #bdb8c8; } strong { color: #eee8f4; }
+  button, .button { display: inline-block; cursor: pointer; border: 0; border-radius: 8px; padding: 14px 20px; background: #edb376; color: #201721; font: 700 15px system-ui; }
+  button:disabled { opacity: .6; cursor: wait; }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+  input { max-width: 100%; color: #bdb8c8; }
+  label { display: block; margin: 16px 0; font-size: 14px; }
+  label input { display: block; margin-top: 6px; }
+  details { margin: 22px 0; } summary { cursor: pointer; color: #c9c1d5; font-size: 14px; }
+  #status { min-height: 25px; font-size: 14px; color: #edb376; overflow-wrap: anywhere; }
+  #status.error { color: #ffaca8; }
+  .fine { font-size: 12px; color: #8f899e; margin-top: 28px; }
+  #canvas { display: none; position: fixed; inset: 0; margin: auto; width: min(100vw, calc(100vh * 16 / 9)) !important; height: min(100vh, calc(100vw * 9 / 16)) !important; }
+  body.playing { padding: 0; background: #000; overflow: hidden; }
+  body.playing main { display: none; } body.playing #canvas { display: block; }
+  #game-status { position: fixed; top: 12px; left: 16px; font: 13px monospace; color: #ddd; pointer-events: none; }
+  #log { display: none; position: fixed; bottom: 0; left: 0; max-height: 35vh; overflow: auto; margin: 0; padding: 8px; background: #000b; font: 12px monospace; white-space: pre-wrap; pointer-events: none; }
+  @media(max-width: 480px) { body { padding: 16px; } main { padding: 28px 22px; } }
+</style>
+</head>
+<body>
+<main>
+  <span class="eyebrow">EXPERIMENTAL BROWSER PORT</span>
+  <h1>Dead Cells</h1>
+  <p>Play your own copy in the browser. Select your <strong>GOG 1.26.0</strong> game folder to begin.</p>
+  <p>Your game files stay on this computer. Saves are stored in this browser.</p>
+  <button id="choose" type="button">Choose game folder</button>
+  <input id="folder" type="file" webkitdirectory multiple hidden>
+  <details>
+    <summary>Or select the two files individually</summary>
+    <label>Game archive · res.pak<input id="pak" type="file" accept=".pak"></label>
+    <label>OpenGL executable · deadcells_gl.exe (or extracted hlboot_gl.dat)<input id="boot" type="file" accept=".exe,.dat"></label>
+    <button id="start" type="button">Start game</button>
+  </details>
+  <p id="status" role="status" aria-live="polite">Keyboard or gamepad · Desktop Chrome / Edge recommended</p>
+  <p class="fine">Only the exact supported game build works with this runtime. Other versions and DLC are not supported. Double-click the game for fullscreen. Add ?log to the URL to see diagnostics.</p>
+  <p class="fine">Unofficial experimental port. Not affiliated with Motion Twin or Evil Empire. Dead Cells belongs to its respective owners. Game files are not included.</p>
+</main>
+<canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()" aria-label="Dead Cells game"></canvas>
+<div id="game-status" role="status"></div>
+<pre id="log"></pre>
+<script src="launcher.js"></script>
+</body>
+</html>
