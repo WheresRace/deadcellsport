@@ -6,7 +6,7 @@ Experimental HashLink → WebAssembly port with a fully online static launcher.
 
 ## Play
 
-Open the site in desktop Chrome or Edge and click **Play in browser**.
+Open the site in desktop Chrome or Edge. The game starts loading immediately.
 The supported base game loads entirely online. No file selection or installation
 is required. Use a keyboard or gamepad. Double-click for fullscreen; append `?log`
 for diagnostics. This port does not provide touch controls.

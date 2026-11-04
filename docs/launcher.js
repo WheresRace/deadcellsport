@@ -1,34 +1,25 @@
 'use strict';
 var Module;
 (function() {
-  var status = document.getElementById('status');
+  var errorEl = document.getElementById('error');
   var canvas = document.getElementById('canvas');
-  var gameStatus = document.getElementById('game-status');
   var logEl = document.getElementById('log');
-  var button = document.getElementById('start');
-  var busy = false;
-  if (new URLSearchParams(location.search).has('log')) logEl.style.display = 'block';
+  if (new URLSearchParams(location.search).has('log')) logEl.hidden = false;
 
   function log(message) {
     console.log(message);
-    if (logEl.style.display === 'block') {
+    if (!logEl.hidden) {
       logEl.textContent = (logEl.textContent + message + '\n').slice(-60000);
       logEl.scrollTop = logEl.scrollHeight;
     }
   }
   function fail(error) {
     document.body.classList.remove('playing');
-    gameStatus.textContent = '';
-    status.className = 'error';
-    status.textContent = error.message || String(error);
-    log(status.textContent);
+    errorEl.textContent = error.message || String(error);
+    errorEl.hidden = false;
+    log(errorEl.textContent);
   }
-  button.addEventListener('click', async function() {
-    if (busy) return;
-    busy = true;
-    button.disabled = true;
-    status.className = '';
-    status.textContent = 'Connecting to the game…';
+  async function start() {
     try {
       if (!window.WebAssembly || !canvas.getContext('webgl2')) throw new Error('This browser needs WebAssembly and WebGL 2 enabled.');
       var response = await fetch('runtime.json');
@@ -36,7 +27,6 @@ var Module;
       var config = await response.json();
       var wasmBinary;
       if (config.wasmUrl) {
-        status.textContent = 'Downloading game runtime…';
         var wasmResponse = await fetch(config.wasmUrl);
         if (!wasmResponse.ok) throw new Error('Runtime download failed. Reload to try again.');
         wasmBinary = await wasmResponse.arrayBuffer();
@@ -53,26 +43,19 @@ var Module;
         hlaotPakManifest: { 'res.pak': config.pak },
         print: log,
         printErr: log,
-        setStatus: function(message) { gameStatus.textContent = message; },
+        setStatus: function() {},
         onAbort: function(reason) { fail(new Error('Game stopped: ' + reason + '. Reload to try again.')); },
-        onRuntimeInitialized: function() {
-          gameStatus.textContent = 'Loading game and compiling shaders…';
-          requestAnimationFrame(function() { gameStatus.textContent = ''; });
-        }
       };
       document.body.classList.add('playing');
-      gameStatus.textContent = 'Loading game runtime…';
       var script = document.createElement('script');
       script.src = 'deadcells.js';
       script.onerror = function() { fail(new Error('Runtime download failed. Reload to try again.')); };
       document.body.appendChild(script);
       canvas.focus();
     } catch (error) {
-      busy = false;
-      button.disabled = false;
       fail(error);
     }
-  });
+  }
   async function fullscreen() {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -100,4 +83,5 @@ var Module;
       });
     }, true);
   });
+  start();
 })();
