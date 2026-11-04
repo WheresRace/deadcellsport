@@ -705,40 +705,93 @@ def tables(gen):
     return '\n'.join(out) + '\n'
 
 
+REAL_LIBS = set(os.environ.get('HLAOT_REAL_LIBS', 'std').split(','))
+LIB_PREFIX = {'std': 'hl_'}
+
+
+def natives(gen):
+    c = gen.c
+    out = ['#include <stdbool.h>', '#include <stdio.h>', 'typedef unsigned char vbyte;', 'typedef struct hl_type hl_type;',
+           'typedef long long int64;', 'typedef unsigned long long uint64;']
+    w = out.append
+    seen = set()
+    entries = []
+    for i, (lib, name, t, findex) in enumerate(c.natives):
+        lib = lib.lstrip('?')
+        args = ','.join(ctype(x) for x in t.args) or 'void'
+        if lib in REAL_LIBS:
+            sym = LIB_PREFIX.get(lib, lib + '_') + name
+            if sym not in seen:
+                seen.add(sym)
+                w('%s %s(%s);' % (ctype(t.ret), sym, args))
+        else:
+            sym = 'stub_%s_%s' % (lib, name)
+            if sym not in seen:
+                seen.add(sym)
+                params = ','.join('%s p%d' % (ctype(x), k) for k, x in enumerate(t.args)) or 'void'
+                ret = '' if t.ret.kind == HVOID else ' return 0;'
+                w('static %s %s(%s) { static int warned; if( !warned++ ) fprintf(stderr,"[stub] %s@%s\\n");%s }' % (
+                    ctype(t.ret), sym, params, lib, name, ret))
+        entries.append(sym)
+    w('void *hlaot_natives[] = {')
+    for sym in entries:
+        w('\t(void*)%s,' % sym)
+    w('};')
+    return '\n'.join(out) + '\n'
+
+
 def main(path, out_dir, per_file_ops=60000):
     data = open(path, 'rb').read()
     code = hlb.read(data)
     gen = Gen(code)
     os.makedirs(out_dir, exist_ok=True)
     files = []
-    chunk, size, needed, n = [], 0, set(), 0
+    trap_op = OPS['Trap']
+    groups = {'fun': [[], 0, set()], 'trap': [[], 0, set()]}
+    counters = collections.Counter()
 
-    def flush():
-        nonlocal chunk, size, needed, n
+    def flush(kind):
+        chunk, size, needed = groups[kind]
         if not chunk:
             return
         own = {f for f, _ in chunk}
         decls = [gen.fdecl(x) for x in sorted(needed | own)]
-        name = 'fun_%03d.c' % n
+        name = '%s_%03d.c' % (kind, counters[kind])
+        counters[kind] += 1
         with open(os.path.join(out_dir, name), 'w', encoding='utf-8', newline='\n') as o:
             o.write(HEADER)
             o.write('\n'.join(decls) + '\n\n')
             o.write('\n\n'.join(body for _, body in chunk) + '\n')
         files.append(name)
-        n += 1
-        chunk, size, needed = [], 0, set()
+        groups[kind] = [[], 0, set()]
 
+    big = []
     for f in code.functions:
+        if len(f.ops) >= 20000:
+            big.append(f)
+            continue
+        kind = 'trap' if any(op == trap_op for op, _ in f.ops) else 'fun'
+        g = groups[kind]
+        g[0].append((f.findex, gen.function(f, g[2])))
+        g[1] += len(f.ops)
+        if g[1] >= per_file_ops:
+            flush(kind)
+    flush('fun')
+    flush('trap')
+    for f in big:
+        needed = set()
         body = gen.function(f, needed)
-        chunk.append((f.findex, body))
-        size += len(f.ops)
-        if size >= per_file_ops:
-            flush()
-    flush()
+        decls = [gen.fdecl(x) for x in sorted(needed | {f.findex})]
+        name = 'big_%d.c' % f.findex
+        with open(os.path.join(out_dir, name), 'w', encoding='utf-8', newline=chr(10)) as o:
+            o.write(HEADER + chr(10).join(decls) + chr(10) * 2 + body + chr(10))
+        files.append(name)
     with open(os.path.join(out_dir, 'reflect.c'), 'w', encoding='utf-8', newline='\n') as o:
         o.write(reflect(gen))
     with open(os.path.join(out_dir, 'tables.c'), 'w', encoding='utf-8', newline='\n') as o:
         o.write(tables(gen))
+    with open(os.path.join(out_dir, 'natives.c'), 'w', encoding='utf-8', newline='\n') as o:
+        o.write(natives(gen))
     print('functions', len(code.functions), 'files', len(files), 'signatures', len(gen.sigs), 'offsets', len(gen.offsets))
 
 
