@@ -2,18 +2,19 @@
 
 Experimental HashLink → WebAssembly port with a fully online static launcher.
 
-**[Play online](https://deadcells-web-race.giovanniid6.chatgpt.site)**
+**[Play online](https://wheresrace.github.io/deadcellsport/)**
 
 ## Play
 
 Open the site in desktop Chrome or Edge. The game starts loading immediately.
 The supported base game loads entirely online. No file selection or installation
-is required. Use a keyboard or gamepad. Double-click for fullscreen; append `?log`
+is required. Use a keyboard or gamepad. Click the game to capture the mouse.
+F11 toggles fullscreen; rapid mouse clicks do not change fullscreen. Append `?log`
 for diagnostics. This port does not provide touch controls.
 
-The primary launcher is hosted on ChatGPT Sites and loads its runtime and bytecode
-from the versioned GitHub asset host. A GitHub Pages mirror is also configured at
-https://wheresrace.github.io/deadcellsport/ and depends on GitHub Actions for deployment.
+The primary launcher is hosted on GitHub Pages. Its deployment uses GitHub Actions.
+An existing ChatGPT Sites deployment is kept compatible and loads the same runtime
+and bytecode from the versioned GitHub asset host.
 The 2.07 GB archive is streamed
 on demand from immutable 16 MiB files in this repository using GitHub's raw asset
 host, which supports CORS and byte ranges. The generated Pages bundle itself is

@@ -62,8 +62,35 @@ var Module;
       else await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
     } catch (error) { log(error.message); }
   }
-  canvas.addEventListener('dblclick', fullscreen);
+  // Attack clicks must never toggle fullscreen or release mouse capture.
+  var pointerLockPending = false;
+  canvas.addEventListener('pointerdown', function() { canvas.focus({ preventScroll: true }); });
+  canvas.addEventListener('click', function(event) {
+    if (event.button !== 0 || typeof runtimeInitialized === 'undefined' || !runtimeInitialized) return;
+    canvas.focus({ preventScroll: true });
+    if (!canvas.requestPointerLock || pointerLockPending || document.pointerLockElement === canvas) return;
+    pointerLockPending = true;
+    try {
+      var request = canvas.requestPointerLock();
+      if (request && typeof request.catch === 'function') request.catch(function(error) {
+        pointerLockPending = false;
+        log('[mouse] ' + error.message);
+      });
+    } catch (error) {
+      pointerLockPending = false;
+      log('[mouse] ' + error.message);
+    }
+  });
+  document.addEventListener('pointerlockchange', function() {
+    pointerLockPending = false;
+    if (document.pointerLockElement === canvas) canvas.focus({ preventScroll: true });
+  });
+  document.addEventListener('pointerlockerror', function() { pointerLockPending = false; });
   addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && document.pointerLockElement === canvas) {
+      document.exitPointerLock();
+      return;
+    }
     if (event.key === 'F11' && document.body.classList.contains('playing')) {
       event.preventDefault(); event.stopImmediatePropagation(); fullscreen();
     }
