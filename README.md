@@ -13,8 +13,6 @@ F11 toggles fullscreen; rapid mouse clicks do not change fullscreen. Append `?lo
 for diagnostics. This port does not provide touch controls.
 
 The primary launcher is hosted on GitHub Pages. Its deployment uses GitHub Actions.
-The previous ChatGPT Sites address redirects to this URL, avoiding the personal
-account name in that host's address.
 The 2.07 GB archive is streamed
 on demand from immutable 16 MiB files in this repository using GitHub's raw asset
 host, which supports CORS and byte ranges. The generated Pages bundle itself is
@@ -47,7 +45,7 @@ needs no application server and does not upload client logs.
 For other static hosts, the launcher also accepts `wasmUrl` and `bootUrl` in
 `runtime.json`. Point them to `docs/deadcells.wasm` and `docs/hlboot.bin` under the
 same immutable asset tag, and host only `index.html`, `launcher.js`, `deadcells.js`
-and `runtime.json`. This is the primary Site's configuration.
+and `runtime.json`.
 
 For local testing: `python -m http.server 8643 --directory docs`, then visit
 `http://localhost:8643/`. The original developer server remains available via
